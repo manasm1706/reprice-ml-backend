@@ -2,6 +2,9 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from graph import app as pricing_agent
+from tools import init_vector_store
+
+
 
 import requests
 from fastapi.responses import Response
@@ -85,6 +88,12 @@ def proxy_image(url: str):
         )
     except Exception as e:
         raise HTTPException(status_code=404, detail="Image fetch failed")
+    
+@app.on_event("startup")
+def startup_event():
+    print("🚀 Initializing vector DB...")
+    init_vector_store()
+    print("✅ Vector DB ready")
 
 # Define the Input Schema (Data validation)
 class PricingRequest(BaseModel):

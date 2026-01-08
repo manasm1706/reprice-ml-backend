@@ -65,14 +65,24 @@ def build_vector_db():
 # --------------------------------------------------
 # Load or Create Vector DB
 # --------------------------------------------------
-if os.path.exists(DB_DIR) and os.listdir(DB_DIR):
-    print("✅ Loading existing Vector Database")
-    vector_store = Chroma(
-        embedding_function=embeddings,
-        persist_directory=DB_DIR,
-    )
-else:
-    vector_store = build_vector_db()
+# backend/tools.py
+vector_store = None  # 👈 global, but EMPTY
+
+def init_vector_store():
+    global vector_store
+
+    if vector_store is not None:
+        return
+
+    if os.path.exists(DB_DIR) and os.listdir(DB_DIR):
+        print("✅ Loading existing Vector DB")
+        vector_store = Chroma(
+            embedding_function=embeddings,
+            persist_directory=DB_DIR,
+        )
+    else:
+        vector_store = build_vector_db()
+
 
 # --------------------------------------------------
 # Retriever Tool (used by LangGraph)
