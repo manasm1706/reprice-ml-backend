@@ -1,8 +1,9 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from graph import app as pricing_agent
-from tools import init_vector_store
+from backend.graph import app as pricing_agent
+from backend.tools import init_vector_store
+
 
 
 
