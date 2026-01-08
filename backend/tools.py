@@ -14,9 +14,12 @@ DB_Dir = "./vectorDB"
 def build_vector_DB():
     print("Creating new Vector Database")
     # Prefer all_phones_2 which includes image links
-    csv_path = "./data/phones.csv"
-    if not os.path.exists(csv_path):
-        csv_path = "./data/all_phones.csv"
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    DB_Dir = os.path.join(BASE_DIR, "vectorDB")
+
+
+
+    
 
     df = pd.read_csv(csv_path)
 

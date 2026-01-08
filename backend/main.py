@@ -24,10 +24,12 @@ app.add_middleware(
 # Load Phone Data from CSV (prefer all_phones_2 with images)
 phones_db = []
 try:
-    csv_path = os.path.join("data", "phones.csv")
-    if not os.path.exists(csv_path):
-        # fallback to legacy CSV if needed
-        csv_path = os.path.join("data", "all_phones.csv")
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    csv_path = os.path.join(BASE_DIR, "data", "phones.csv")
+
+
+   
+
 
     if os.path.exists(csv_path):
         with open(csv_path, mode="r", encoding="utf-8") as f:
