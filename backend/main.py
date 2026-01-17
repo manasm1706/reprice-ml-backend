@@ -1,7 +1,11 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from .graph import app as pricing_agent
+from backend.graph import app as pricing_agent
+from backend.tools import init_vector_store
+import asyncio
+import requests
+from fastapi.responses import Response
 import csv
 import os
 from typing import List, Dict
@@ -12,41 +16,80 @@ app = FastAPI(title="RePrice AI API")
 # Add CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Load Phone Data from CSV (prefer all_phones_2 with images)
+# Global flag to track if vector DB is ready
+vector_db_ready = False
+
+# Load Phone Data from CSV
 phones_db = []
 try:
-    csv_path = os.path.join("data", "phones.csv")
-    if not os.path.exists(csv_path):
-        # fallback to legacy CSV if needed
-        csv_path = os.path.join("data", "all_phones.csv")
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    csv_path = os.path.join(BASE_DIR, "data", "phones.csv")
 
     if os.path.exists(csv_path):
         with open(csv_path, mode="r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                # Normalize image field (CSV header 'link' used in all_phones_2)
                 if 'link' in row and row.get('link'):
                     row['image'] = row.get('link')
                 elif 'image' not in row:
                     row['image'] = ''
                 phones_db.append(row)
-        print(f"Loaded {len(phones_db)} phones from CSV: {os.path.basename(csv_path)}")
+        print(f"✅ Loaded {len(phones_db)} phones from CSV")
     else:
-        print(f"Warning: CSV file not found at {csv_path}")
+        print(f"⚠️ CSV file not found at {csv_path}")
 except Exception as e:
-    print(f"Error loading CSV: {e}")
+    print(f"❌ Error loading CSV: {e}")
+
+@app.get("/")
+def home():
+    """Health check endpoint - always responds quickly"""
+    return {
+        "message": "RePrice AI API is Running",
+        "vector_db_ready": vector_db_ready,
+        "phones_loaded": len(phones_db)
+    }
+
+@app.get("/health")
+def health_check():
+    """Detailed health check"""
+    return {
+        "status": "healthy",
+        "vector_db_ready": vector_db_ready,
+        "phones_count": len(phones_db)
+    }
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize vector DB in background without blocking startup"""
+    global vector_db_ready
+    
+    async def init_db():
+        global vector_db_ready
+        try:
+            print("🚀 Starting vector DB initialization...")
+            # Run the blocking operation in a thread pool
+            await asyncio.to_thread(init_vector_store)
+            vector_db_ready = True
+            print("✅ Vector DB ready")
+        except Exception as e:
+            print(f"❌ Vector DB initialization failed: {e}")
+            vector_db_ready = False
+    
+    # Start initialization in background
+    asyncio.create_task(init_db())
+    print("🟢 Server started - Vector DB loading in background")
 
 @app.get("/search-phones")
 def search_phones(q: str = Query(..., min_length=1)):
+    """Search phones from CSV data"""
     query = q.lower()
     results = []
-    seen = set()
     
     for p in phones_db:
         brand = p.get('brand', '').strip()
@@ -62,11 +105,11 @@ def search_phones(q: str = Query(..., min_length=1)):
                 "image": p.get('image', '') or p.get('link', '')
             })
             
-    # Limit results
     return results[:50]
 
 @app.get("/proxy-image")
 def proxy_image(url: str):
+    """Proxy images to avoid CORS issues"""
     try:
         r = requests.get(
             url,
@@ -80,44 +123,40 @@ def proxy_image(url: str):
     except Exception as e:
         raise HTTPException(status_code=404, detail="Image fetch failed")
 
-# Define the Input Schema (Data validation)
 class PricingRequest(BaseModel):
     model_name: str
     turns_on: bool
-    screen_condition: str  # Accepts "Good", "Minor Scratches", "Shattered", etc.
+    screen_condition: str
     has_box: bool
-    # --- NEW FIELDS ---
     has_bill: bool
     is_under_warranty: bool
-
-@app.get("/")
-def home():
-    return {"message": "RePrice AI API is Running"}
 
 @app.post("/calculate-price")
 async def calculate_price(request: PricingRequest):
     """
-    Endpoint that takes user inputs, runs the LangGraph Agent, 
-    and returns the final calculated price.
+    Calculate phone price using LangGraph Agent
     """
-    # 1. Prepare Input for LangGraph
-    # We map the API request data to the 'PricingState' dictionary
+    # Check if vector DB is ready
+    if not vector_db_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="Vector database is still initializing. Please try again in a few seconds."
+        )
+    
+    # Prepare inputs
     inputs = {
         "model_name": request.model_name,
         "turns_on": request.turns_on,
         "screen_condition": request.screen_condition,
         "has_box": request.has_box,
-        "has_bill": request.has_bill,            # <--- Added
-        "is_under_warranty": request.is_under_warranty, # <--- Added
+        "has_bill": request.has_bill,
+        "is_under_warranty": request.is_under_warranty,
         "log": [] 
     }
     
-    # 2. Run the Agent
     try:
-        # invoke() runs the graph from start to finish
         result = pricing_agent.invoke(inputs)
         
-        # 3. Return the results
         return {
             "final_price": result.get("final_price"),
             "base_price": result.get("base_price"),
@@ -125,5 +164,4 @@ async def calculate_price(request: PricingRequest):
         }
         
     except Exception as e:
-        # If anything breaks, return a 500 error with the message
         raise HTTPException(status_code=500, detail=str(e))
