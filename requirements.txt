@@ -1,5 +1,14 @@
 fastapi
 uvicorn
-pandas
+streamlit
+langchain
+langchain-community
+langchain-core
 python-dotenv
-psycopg2-binary
+langchain-google-genai
+langgraph
+pandas
+langchain-chroma>=0.1.2
+sentence-transformers
+langchain-huggingface
+langchain_groq
