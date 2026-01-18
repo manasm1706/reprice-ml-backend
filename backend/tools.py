@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import threading
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 from langchain_core.tools import tool
@@ -19,6 +20,7 @@ embeddings = HuggingFaceEmbeddings(
 )
 
 vector_store = None
+_init_lock = threading.Lock()
 
 def build_vector_db():
     """Build vector database from CSV"""
@@ -68,32 +70,33 @@ def init_vector_store():
     """Initialize or load vector store"""
     global vector_store
 
-    if vector_store is not None:
-        print("✅ Vector store already loaded")
-        return
+    with _init_lock:
+        if vector_store is not None:
+            print("✅ Vector store already loaded")
+            return
 
-    try:
-        # Try loading existing DB
-        if os.path.exists(DB_DIR) and os.listdir(DB_DIR):
-            print("🔄 Loading existing Vector DB...")
-            vector_store = Chroma(
-                embedding_function=embeddings,
-                persist_directory=DB_DIR,
-                collection_name="phone_collection"
-            )
-            print("✅ Existing Vector DB loaded")
-        else:
-            # Build new DB
-            vector_store = build_vector_db()
-            
-    except Exception as e:
-        print(f"❌ Vector DB initialization error: {e}")
-        # Try rebuilding if loading failed
-        if os.path.exists(DB_DIR):
-            print("🔄 Attempting to rebuild Vector DB...")
-            vector_store = build_vector_db()
-        else:
-            raise
+        try:
+            # Try loading existing DB
+            if os.path.exists(DB_DIR) and os.listdir(DB_DIR):
+                print("🔄 Loading existing Vector DB...")
+                vector_store = Chroma(
+                    embedding_function=embeddings,
+                    persist_directory=DB_DIR,
+                    collection_name="phone_collection"
+                )
+                print("✅ Existing Vector DB loaded")
+            else:
+                # Build new DB
+                vector_store = build_vector_db()
+                
+        except Exception as e:
+            print(f"❌ Vector DB initialization error: {e}")
+            # Try rebuilding if loading failed
+            if os.path.exists(DB_DIR):
+                print("🔄 Attempting to rebuild Vector DB...")
+                vector_store = build_vector_db()
+            else:
+                raise
 
 @tool
 def retriever(query: str) -> str:

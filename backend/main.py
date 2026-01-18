@@ -22,8 +22,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global flag to track if vector DB is ready
-vector_db_ready = False
+# Vector DB init tracking
+vector_db_ready_event: asyncio.Event = asyncio.Event()
+vector_db_init_task: asyncio.Task | None = None
+vector_db_init_error: str | None = None
 
 # Load Phone Data from CSV
 phones_db = []
@@ -51,7 +53,9 @@ def home():
     """Health check endpoint - always responds quickly"""
     return {
         "message": "RePrice AI API is Running",
-        "vector_db_ready": vector_db_ready,
+        "vector_db_ready": vector_db_ready_event.is_set(),
+        "vector_db_initializing": (vector_db_init_task is not None and not vector_db_init_task.done()),
+        "vector_db_error": vector_db_init_error,
         "phones_loaded": len(phones_db)
     }
 
@@ -60,30 +64,50 @@ def health_check():
     """Detailed health check"""
     return {
         "status": "healthy",
-        "vector_db_ready": vector_db_ready,
+        "vector_db_ready": vector_db_ready_event.is_set(),
+        "vector_db_initializing": (vector_db_init_task is not None and not vector_db_init_task.done()),
+        "vector_db_error": vector_db_init_error,
         "phones_count": len(phones_db)
     }
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize vector DB in background without blocking startup"""
-    global vector_db_ready
+    global vector_db_init_task, vector_db_init_error
     
     async def init_db():
-        global vector_db_ready
+        global vector_db_init_error
         try:
             print("🚀 Starting vector DB initialization...")
             # Run the blocking operation in a thread pool
             await asyncio.to_thread(init_vector_store)
-            vector_db_ready = True
+            vector_db_init_error = None
+            vector_db_ready_event.set()
             print("✅ Vector DB ready")
         except Exception as e:
             print(f"❌ Vector DB initialization failed: {e}")
-            vector_db_ready = False
+            vector_db_init_error = str(e)
+            # keep event unset
     
     # Start initialization in background
-    asyncio.create_task(init_db())
+    vector_db_init_task = asyncio.create_task(init_db())
     print("🟢 Server started - Vector DB loading in background")
+
+
+async def _ensure_vector_db_ready(timeout_seconds: float = 25.0) -> bool:
+    """Wait for vector DB readiness (best-effort) to avoid transient 503s."""
+    if vector_db_ready_event.is_set():
+        return True
+
+    # If init failed, don't wait forever.
+    if vector_db_init_error:
+        return False
+
+    try:
+        await asyncio.wait_for(vector_db_ready_event.wait(), timeout=timeout_seconds)
+        return True
+    except asyncio.TimeoutError:
+        return False
 
 @app.get("/search-phones")
 def search_phones(q: str = Query(..., min_length=1)):
@@ -136,12 +160,11 @@ async def calculate_price(request: PricingRequest):
     """
     Calculate phone price using LangGraph Agent
     """
-    # Check if vector DB is ready
-    if not vector_db_ready:
-        raise HTTPException(
-            status_code=503,
-            detail="Vector database is still initializing. Please try again in a few seconds."
-        )
+    # Avoid returning 503 during warmup: wait briefly for init to complete.
+    ready = await _ensure_vector_db_ready(timeout_seconds=25.0)
+    if not ready:
+        detail = vector_db_init_error or "Vector database is still initializing. Please try again in a few seconds."
+        raise HTTPException(status_code=503, detail=detail)
     
     # Prepare inputs
     inputs = {
