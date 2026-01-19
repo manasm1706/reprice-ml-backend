@@ -1,0 +1,11 @@
+# Keep the image small
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.git/
+.gitignore
+node_modules/
+package-lock.json
+package.json

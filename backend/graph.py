@@ -2,6 +2,8 @@ import re
 from typing import TypedDict, Optional, List, Literal
 from backend.tools import retriever
 
+from functools import lru_cache
+
 
 
 from langgraph.graph import START, StateGraph, END
@@ -64,6 +66,7 @@ def extract_decimal_from_text(text: str) -> float:
         return 0.0
 
 # 3. HELPER FUNCTION: DYNAMIC APPRAISAL
+@lru_cache(maxsize=512)
 def get_dynamic_deduction(model_name: str, issue_type: str) -> float:
     """
     Asks the AI (Groq) to estimate a fair deduction % based on the specific severity.

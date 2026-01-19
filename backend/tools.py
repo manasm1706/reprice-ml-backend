@@ -12,15 +12,29 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 CSV_PATH = os.path.join(DATA_DIR, "phones.csv")
 DB_DIR = os.path.join(BASE_DIR, "vectorDB")
 
-# Embeddings (CPU-safe)
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2",
-    model_kwargs={'device': 'cpu'},
-    encode_kwargs={'normalize_embeddings': True}
-)
-
-vector_store = None
+_embeddings = None
+_vector_store = None
 _init_lock = threading.Lock()
+_emb_lock = threading.Lock()
+
+
+def get_embeddings() -> HuggingFaceEmbeddings:
+    """Lazily load embeddings model (expensive) and cache it globally."""
+    global _embeddings
+    if _embeddings is not None:
+        return _embeddings
+
+    with _emb_lock:
+        if _embeddings is not None:
+            return _embeddings
+
+        # Embeddings (CPU-safe)
+        _embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
+        )
+        return _embeddings
 
 def build_vector_db():
     """Build vector database from CSV"""
@@ -55,10 +69,10 @@ def build_vector_db():
 
     # Create vector store with explicit settings
     os.makedirs(DB_DIR, exist_ok=True)
-    
+
     vector_store = Chroma.from_documents(
         documents=documents,
-        embedding=embeddings,
+        embedding=get_embeddings(),
         persist_directory=DB_DIR,
         collection_name="phone_collection"
     )
@@ -68,10 +82,10 @@ def build_vector_db():
 
 def init_vector_store():
     """Initialize or load vector store"""
-    global vector_store
+    global _vector_store
 
     with _init_lock:
-        if vector_store is not None:
+        if _vector_store is not None:
             print("✅ Vector store already loaded")
             return
 
@@ -79,30 +93,39 @@ def init_vector_store():
             # Try loading existing DB
             if os.path.exists(DB_DIR) and os.listdir(DB_DIR):
                 print("🔄 Loading existing Vector DB...")
-                vector_store = Chroma(
-                    embedding_function=embeddings,
+                _vector_store = Chroma(
+                    embedding_function=get_embeddings(),
                     persist_directory=DB_DIR,
                     collection_name="phone_collection"
                 )
                 print("✅ Existing Vector DB loaded")
             else:
                 # Build new DB
-                vector_store = build_vector_db()
+                _vector_store = build_vector_db()
                 
         except Exception as e:
             print(f"❌ Vector DB initialization error: {e}")
             # Try rebuilding if loading failed
             if os.path.exists(DB_DIR):
                 print("🔄 Attempting to rebuild Vector DB...")
-                vector_store = build_vector_db()
+                _vector_store = build_vector_db()
             else:
                 raise
+
+
+def get_vector_store():
+    """Return initialized vector store; tries to init lazily if needed."""
+    global _vector_store
+    if _vector_store is None:
+        init_vector_store()
+    return _vector_store
 
 @tool
 def retriever(query: str) -> str:
     """
     Retrieve closest matching phone models from the vector DB.
     """
+    vector_store = get_vector_store()
     if vector_store is None:
         return "Error: Vector database not initialized"
     
