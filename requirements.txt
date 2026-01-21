@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 pandas
+gunicorn
 python-dotenv
 psycopg2-binary
 sentence-transformers

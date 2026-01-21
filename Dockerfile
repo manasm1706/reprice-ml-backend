@@ -3,7 +3,7 @@
 # - Ships the prebuilt Chroma vectorDB directory in the image
 # - Keeps startup non-blocking (app already initializes vector DB in background)
 
-FROM python:3.11-slim
+FROM pytorch/pytorch:latest
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -28,11 +28,11 @@ RUN pip install --upgrade pip \
 # Copy app code + data + vector DB
 COPY backend /app/backend
 COPY data /app/data
-COPY vectorDB /app/vectorDB
+# COPY vectorDB /app/vectorDB
 
 # Pre-download embedding model so cold starts are faster on free tier
 # (This warms HuggingFace cache inside the image.)
 RUN python -c "from backend.tools import get_embeddings; get_embeddings(); print('✅ embeddings warmed')"
 
 # Render provides PORT env var
-CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "gunicorn backend.main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000}"]
