@@ -15,7 +15,8 @@ RUN apt-get update \
 # Install Python deps first for better layer caching
 COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip \
-    && pip install -r /app/requirements.txt
+    && pip install -r /app/requirements.txt \
+    && pip install pinecone
 
 # Copy app code + data
 COPY backend /app/backend
