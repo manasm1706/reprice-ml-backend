@@ -11,18 +11,6 @@ __pycache__/
 Videos Demo/
 vectorDB/
 
-# System// filepath: c:\Users\harsh\Desktop\Harsh\RePrice AI\RePrice\.gitignore
-# Dependencies
-node_modules/
-venv/
-env/
-__pycache__/
-
-# Environment variables
-.env
-
-# Large media and Database files
-Videos Demo/
-vectorDB/
-
 # System
+.DS_Store
+Thumbs.db

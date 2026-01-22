@@ -1,3 +1,18 @@
+'''
+LEGACY IMPLEMENTATION (disabled):
+- Loaded CSV locally
+- Built/loaded local vector DB (Chroma)
+- Ran local embedding models
+- Used langgraph
+
+This file is kept only to preserve the entrypoint `backend.main:app`.
+The real production/free-tier backend is now in `backend/thin_api.py`.
+'''
+
+from backend.thin_api import app
+
+r'''  # Everything below is intentionally disabled.
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -395,3 +410,5 @@ async def calculate_price(request: PricingRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+'''

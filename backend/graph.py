@@ -1,3 +1,7 @@
+from backend.thin_api import app
+
+r'''
+
 import re
 from typing import TypedDict, Optional, List, Literal
 from backend.tools import retriever
@@ -264,3 +268,5 @@ if __name__ == "__main__":
     print(f"Model: {result_2['model_name']}")
     print(f"Final Price: ₹{result_2['final_price']:,.2f}")
     print(f"Reasoning: {result_2['log'][-3:]}")
+
+'''

@@ -1,3 +1,24 @@
+from typing import Any
+
+from backend.thin_api import search_phones
+
+
+def retriever(query: str) -> str:
+    """Compatibility helper: returns a formatted list of Pinecone matches."""
+    phones = search_phones(query, top_k=5)
+    if not phones:
+        return "No matching Phone Found"
+
+    lines = ["Found the following similar models:"]
+    for i, md in enumerate(phones):
+        lines.append(
+            f"{i+1}. Model: {md.get('brand')} {md.get('model')} {md.get('variant')} | Price: {md.get('price')}"
+        )
+    return "\n".join(lines)
+
+
+r'''
+
 import os
 import pandas as pd
 import threading
@@ -148,3 +169,5 @@ def retriever(query: str) -> str:
         
     except Exception as e:
         return f"Error during retrieval: {str(e)}"
+
+'''
